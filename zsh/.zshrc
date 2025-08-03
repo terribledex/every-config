@@ -1,7 +1,7 @@
 export ZSH="$HOME/.oh-my-zsh"
 
 # 🎨 Theme (уже установленная)
-ZSH_THEME="minimal-git"
+ZSH_THEME="fuck"
 
 # ⚙️ Plugins
 plugins=(
