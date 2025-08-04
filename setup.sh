@@ -58,16 +58,11 @@ check_requirements() {
         missing_tools+=("curl")
     fi
     
-    # Проверяем специфичные для компонентов требования
-    if [[ "$INSTALL_NVIM" == "true" ]]; then
-        if ! command -v make &> /dev/null; then
-            missing_tools+=("make")
-        fi
-    fi
+    # Минимальный конфиг nvim не требует make
     
     if [[ ${#missing_tools[@]} -gt 0 ]]; then
         print_warning "Отсутствуют необходимые инструменты: ${missing_tools[*]}"
-        echo -e "${YELLOW}Установить их автоматически? (y/N)${NC}"
+        echo -e "${YELLOW}Установить их автоматически? (y/N)${NC} "
         read -r install_missing
         
         if [[ "$install_missing" =~ ^[Yy]$ ]]; then
@@ -155,7 +150,7 @@ install_dependencies() {
             # Устанавливаем thefuck если его нет
             if ! command -v thefuck &> /dev/null; then
                 print_step "Устанавливаем thefuck..."
-                pip3 install thefuck || brew install thefuck
+                pip3 install --user thefuck || brew install thefuck
             fi
             ;;
         "ubuntu")
@@ -178,18 +173,30 @@ install_dependencies() {
             # Устанавливаем thefuck
             if ! command -v thefuck &> /dev/null; then
                 print_step "Устанавливаем thefuck..."
-                pip3 install thefuck
+                pip3 install --user thefuck
             fi
             ;;
         "arch")
             sudo pacman -Syu --noconfirm
-            sudo pacman -S --noconfirm tmux neovim git curl wget zsh fzf eza python python-pip
-            sudo pacman -S --noconfirm zsh-autosuggestions zsh-syntax-highlighting
+            sudo pacman -S --noconfirm tmux neovim git curl wget zsh fzf python python-pip
+            
+            # Устанавливаем eza
+            if ! command -v eza &> /dev/null; then
+                print_step "Устанавливаем eza..."
+                sudo pacman -S --noconfirm eza || {
+                    if command -v yay &> /dev/null; then
+                        yay -S --noconfirm eza
+                    fi
+                }
+            fi
+            
+            # Устанавливаем zsh плагины
+            sudo pacman -S --noconfirm zsh-autosuggestions zsh-syntax-highlighting || true
             
             # Устанавливаем thefuck
             if ! command -v thefuck &> /dev/null; then
                 print_step "Устанавливаем thefuck..."
-                pip install thefuck || {
+                pip install --user thefuck || {
                     if command -v yay &> /dev/null; then
                         yay -S --noconfirm thefuck
                     fi
@@ -332,8 +339,8 @@ install_neovim_config() {
         return 1
     fi
     
-    # Устанавливаем lazy.nvim (будет установлен автоматически при первом запуске)
-    print_success "Neovim конфигурация готова (плагины установятся при первом запуске)"
+    # lazy.nvim и плагины установятся автоматически при первом запуске
+    print_success "Neovim конфигурация готова (Catppuccin тема и Treesitter установятся при первом запуске)"
 }
 
 # 🔧 Установка дополнительных инструментов
@@ -371,7 +378,7 @@ create_symlinks() {
     
     echo -e "\n${YELLOW}Хотите создать символические ссылки вместо копирования файлов?${NC}"
     echo -e "${CYAN}Это позволит автоматически синхронизировать изменения с репозиторием.${NC}"
-    echo -e "${YELLOW}Создать символические ссылки? (y/N)${NC}"
+    echo -e "${YELLOW}Создать символические ссылки? (y/N)${NC} "
     read -r symlink_response
     
     if [[ "$symlink_response" =~ ^[Yy]$ ]]; then
@@ -393,7 +400,7 @@ create_symlinks() {
         
         if [[ "$INSTALL_NVIM" == "true" ]]; then
             rm -rf "$HOME/.config/nvim"
-            mkdir -p "$HOME/.config"
+            mkdir -p "$HOME/.config/nvim"
             ln -sf "$DOTFILES_DIR/nvim/.nvim.conf" "$HOME/.config/nvim/init.lua"
         fi
         
@@ -409,24 +416,28 @@ verify_installation() {
     
     local errors=0
     
-    # Проверяем основные файлы
-    if [[ ! -f "$HOME/.zshrc" ]]; then
+    # Проверяем только установленные компоненты
+    if [[ "$INSTALL_ZSH" == "true" ]] && [[ ! -f "$HOME/.zshrc" ]]; then
         print_error ".zshrc не найден"
         errors=$((errors + 1))
     fi
     
-    if [[ ! -f "$HOME/.tmux.conf" ]]; then
+    if [[ "$INSTALL_TMUX" == "true" ]] && [[ ! -f "$HOME/.tmux.conf" ]]; then
         print_error ".tmux.conf не найден"
         errors=$((errors + 1))
     fi
     
-    if [[ ! -f "$HOME/.config/nvim/init.lua" ]]; then
+    if [[ "$INSTALL_NVIM" == "true" ]] && [[ ! -f "$HOME/.config/nvim/init.lua" ]]; then
         print_error "Neovim конфигурация не найдена"
         errors=$((errors + 1))
     fi
     
-    # Проверяем команды
-    local commands=("zsh" "tmux" "nvim" "git")
+    # Проверяем команды только для установленных компонентов
+    local commands=("git")
+    [[ "$INSTALL_ZSH" == "true" ]] && commands+=("zsh")
+    [[ "$INSTALL_TMUX" == "true" ]] && commands+=("tmux")
+    [[ "$INSTALL_NVIM" == "true" ]] && commands+=("nvim")
+    
     for cmd in "${commands[@]}"; do
         if ! command -v "$cmd" &> /dev/null; then
             print_error "Команда $cmd не найдена"
@@ -450,8 +461,18 @@ final_setup() {
     # Обновляем права доступа
     chmod +x "$HOME/.dotfiles/setup.sh" 2>/dev/null || true
     
+    # Добавляем ~/.local/bin в PATH если его там нет
+    if [[ "$INSTALL_ZSH" == "true" ]] && [[ -f "$HOME/.zshrc" ]]; then
+        if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.zshrc" 2>/dev/null; then
+            echo "" >> "$HOME/.zshrc"
+            echo "# Add ~/.local/bin to PATH for user-installed packages" >> "$HOME/.zshrc"
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
+            print_success "Добавлен ~/.local/bin в PATH"
+        fi
+    fi
+    
     # Создаем алиас для быстрого обновления
-    if ! grep -q "alias dotfiles-update" "$HOME/.zshrc" 2>/dev/null; then
+    if [[ "$INSTALL_ZSH" == "true" ]] && ! grep -q "alias dotfiles-update" "$HOME/.zshrc" 2>/dev/null; then
         echo "" >> "$HOME/.zshrc"
         echo "# Dotfiles management" >> "$HOME/.zshrc"
         echo "alias dotfiles-update='cd ~/.dotfiles && git pull && ./setup.sh'" >> "$HOME/.zshrc"
@@ -480,7 +501,7 @@ show_final_info() {
     fi
     
     if [[ "$INSTALL_NVIM" == "true" ]]; then
-        echo -e "  ${CYAN}•${NC} Neovim IDE конфигурация с LSP и плагинами"
+        echo -e "  ${CYAN}•${NC} Neovim минимальный конфиг с Catppuccin темой и подсветкой синтаксиса"
     fi
     
     echo -e "  ${CYAN}•${NC} Современные инструменты: eza, fzf, thefuck"
@@ -489,9 +510,10 @@ show_final_info() {
     local step=1
     
     if [[ "$INSTALL_ZSH" == "true" ]]; then
-        echo -e "  ${CYAN}${step}.${NC} Перезапустите терминал или выполните: ${BLUE}source ~/.zshrc${NC}"
+        echo -e "  ${CYAN}${step}.${NC} Перезапустите терминал или выполните: ${BLUE}exec zsh${NC}"
         echo -e "  ${CYAN}$((step+1)).${NC} Доступные темы zsh: ${BLUE}dex${NC} и ${BLUE}fuck${NC} (текущая: fuck)"
-        step=$((step+2))
+        echo -e "  ${CYAN}$((step+2)).${NC} Если thefuck не работает, выполните: ${BLUE}source ~/.zshrc${NC}"
+        step=$((step+3))
     fi
     
     if [[ "$INSTALL_TMUX" == "true" ]]; then
@@ -500,7 +522,7 @@ show_final_info() {
     fi
     
     if [[ "$INSTALL_NVIM" == "true" ]]; then
-        echo -e "  ${CYAN}${step}.${NC} Откройте nvim - плагины установятся автоматически"
+        echo -e "  ${CYAN}${step}.${NC} Откройте nvim - Catppuccin тема и Treesitter установятся автоматически"
         step=$((step+1))
     fi
     
@@ -541,7 +563,7 @@ show_help() {
     echo -e "\n${YELLOW}Компоненты:${NC}"
     echo -e "  ${GREEN}Zsh${NC}     - Oh My Zsh + кастомные темы (dex, fuck)"
     echo -e "  ${GREEN}Tmux${NC}    - Catppuccin Mocha тема + удобные хоткеи"
-    echo -e "  ${GREEN}Neovim${NC}  - Полная IDE с LSP, автодополнением, плагинами"
+    echo -e "  ${GREEN}Neovim${NC}  - Минимальный конфиг с Catppuccin темой и подсветкой синтаксиса"
     
     echo -e "\n${YELLOW}Примеры:${NC}"
     echo -e "  ${BLUE}./setup.sh --full${NC}              # Установить все"
@@ -617,7 +639,7 @@ main() {
     echo -e "${CYAN}Этот скрипт установит:${NC}"
     echo -e "  • ${GREEN}Zsh${NC} с Oh My Zsh и кастомными темами (dex, fuck)"
     echo -e "  • ${GREEN}Tmux${NC} с Catppuccin Mocha темой и удобными хоткеями"
-    echo -e "  • ${GREEN}Neovim${NC} IDE с LSP, автодополнением и плагинами"
+    echo -e "  • ${GREEN}Neovim${NC} минимальный конфиг с Catppuccin темой и подсветкой синтаксиса"
     echo -e "  • ${GREEN}Современные инструменты${NC}: eza, fzf, thefuck"
     
     echo -e "\n${BLUE}📁 Доступные конфигурации:${NC}"
@@ -628,7 +650,7 @@ main() {
     echo -e "  ${YELLOW}tmux/${NC}"
     echo -e "    └── .tmux.conf (Catppuccin тема, mouse support)"
     echo -e "  ${YELLOW}nvim/${NC}"
-    echo -e "    └── .nvim.conf (полная IDE конфигурация)"
+    echo -e "    └── .nvim.conf (минимальный конфиг с темой и подсветкой)"
     
     # Интерактивный режим только если не переданы аргументы
     if [[ "$INSTALL_ZSH" == "false" && "$INSTALL_TMUX" == "false" && "$INSTALL_NVIM" == "false" ]]; then
@@ -636,7 +658,7 @@ main() {
         echo -e "  ${CYAN}1.${NC} Полная установка (все компоненты)"
         echo -e "  ${CYAN}2.${NC} Выборочная установка"
         echo -e "  ${CYAN}3.${NC} Отмена"
-        echo -e "\n${YELLOW}Ваш выбор (1-3):${NC}"
+        echo -e "\n${YELLOW}Ваш выбор (1-3):${NC} "
         read -r install_mode
         
         case $install_mode in
@@ -646,15 +668,15 @@ main() {
                 INSTALL_NVIM=true
                 ;;
             2)
-                echo -e "\n${YELLOW}Установить Zsh конфигурацию? (y/N)${NC}"
+                echo -e "\n${YELLOW}Установить Zsh конфигурацию? (y/N)${NC} "
                 read -r zsh_response
                 INSTALL_ZSH=$([[ "$zsh_response" =~ ^[Yy]$ ]] && echo true || echo false)
                 
-                echo -e "${YELLOW}Установить Tmux конфигурацию? (y/N)${NC}"
+                echo -e "${YELLOW}Установить Tmux конфигурацию? (y/N)${NC} "
                 read -r tmux_response
                 INSTALL_TMUX=$([[ "$tmux_response" =~ ^[Yy]$ ]] && echo true || echo false)
                 
-                echo -e "${YELLOW}Установить Neovim конфигурацию? (y/N)${NC}"
+                echo -e "${YELLOW}Установить Neovim конфигурацию? (y/N)${NC} "
                 read -r nvim_response
                 INSTALL_NVIM=$([[ "$nvim_response" =~ ^[Yy]$ ]] && echo true || echo false)
                 ;;
