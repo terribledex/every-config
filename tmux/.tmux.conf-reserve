@@ -1,0 +1,148 @@
+# PLUGINS (TPM)
+
+set -g @plugin 'tmux-plugins/tpm'
+set -g @plugin 'tmux-plugins/tmux-sensible'
+set -g @plugin 'tmux-plugins/tmux-yank'
+set -g @plugin 'tmux-plugins/tmux-battery'
+set -g @plugin 'tmux-plugins/tmux-open'
+set -g @plugin 'tmux-plugins/tmux-prefix-highlight'
+set -g @plugin 'tmux-plugins/tmux-cpu'
+
+# Reload configuration
+unbind r
+bind r source-file ~/.tmux.conf \; display "Config Reloaded Successfully!"
+
+# Change prefix key
+set -g prefix C-s
+bind C-s send-prefix
+
+# Enable mouse support
+set -g mouse on
+
+# Terminal improvements
+set -g default-terminal "screen-256color"
+set -g terminal-overrides ',xterm-256color:Tc'
+set -ga terminal-overrides '*:Ss=\E[%p1%d q:Se=\E[ q'
+
+# Timing settings
+set -g escape-time 0
+set -g repeat-time 300
+set -g focus-events on
+
+# Status bar position
+set-option -g status-position top
+
+#  🧭 NAVIGATION & PANE MANAGEMENT
+
+# Vim-style pane navigation
+bind h select-pane -L
+bind j select-pane -D
+bind k select-pane -U
+bind l select-pane -R
+
+# Pane splitting (multiple options)
+bind '"' split-window -v -c "#{pane_current_path}"  # Standard horizontal split
+bind '%' split-window -h -c "#{pane_current_path}"  # Standard vertical split
+bind '|' split-window -h -c "#{pane_current_path}"  # Intuitive vertical split
+bind '-' split-window -v -c "#{pane_current_path}"  # Intuitive horizontal split
+
+# Pane resizing
+bind -r H resize-pane -L 5
+bind -r J resize-pane -D 5
+bind -r K resize-pane -U 5
+bind -r L resize-pane -R 5
+
+# Window management
+bind c new-window -c "#{pane_current_path}"
+bind n next-window
+bind p previous-window
+
+#  CATPPUCCIN MOCHA THEME
+
+# Color palette
+thm_bg="#1e1e2e"
+thm_fg="#cdd6f4"
+thm_cyan="#89dceb"
+thm_black="#181825"
+thm_gray="#313244"
+thm_magenta="#cba6f7"
+thm_pink="#f5c2e7"
+thm_red="#f38ba8"
+thm_green="#a6e3a1"
+thm_yellow="#f9e2af"
+thm_blue="#89b4fa"
+thm_orange="#fab387"
+thm_black4="#585b70"
+
+# Status bar styling
+set -g status-style "bg=$thm_bg,fg=$thm_fg"
+set -g message-style "bg=$thm_bg,fg=$thm_pink"
+set -g message-command-style "bg=$thm_bg,fg=$thm_pink"
+
+# Pane borders
+set -g pane-border-style "fg=$thm_black4"
+set -g pane-active-border-style "fg=$thm_blue"
+
+# WINDOW STATUS STYLING
+
+# Active window
+setw -g window-status-current-style "bg=$thm_gray,fg=$thm_yellow,bold"
+setw -g window-status-current-format " 󰈚 #I: #W#{?window_zoomed_flag, 🔍,} "
+
+# Inactive window
+setw -g window-status-style "fg=$thm_black4"
+setw -g window-status-format " 󰈙 #I: #W "
+
+# Activity notifications
+setw -g window-status-activity-style "bg=$thm_bg,fg=$thm_red"
+setw -g window-status-bell-style "bg=$thm_red,fg=$thm_bg"
+
+# STATUS BAR CONTENT
+
+# Status bar lengths
+set -g status-left-length 120
+set -g status-right-length 120
+set -g status-interval 5
+
+# Left status bar
+set -g status-left "#[fg=$thm_blue,bold] 󰇻 #S #[fg=$thm_pink] │ #[fg=$thm_green] 󰀄 #(whoami) #[fg=$thm_pink] │ #[fg=$thm_orange] 󰉋 #{pane_current_path} #[fg=$thm_pink] │ #[fg=$thm_magenta]#{?#{!=:#{git_branch},}, 󰊢 #{git_branch},}"
+
+# Right status bar
+set -g status-right "#{prefix_highlight} #[fg=$thm_yellow] 󰥔 %H:%M:%S #[fg=$thm_pink] │ #[fg=$thm_green] 󰁹 #{battery_icon} #{battery_percentage} #[fg=$thm_pink] │ #[fg=$thm_magenta] 󰍛 #{cpu_percentage} #[fg=$thm_pink] │ #[fg=$thm_red] 󰆼 #{ram_percentage}"
+
+# PREFIX HIGHLIGHT PLUGIN
+
+set -g @prefix_highlight_fg "$thm_bg"
+set -g @prefix_highlight_bg "$thm_orange"
+set -g @prefix_highlight_prefix_prompt " 󰛔 PREFIX "
+set -g @prefix_highlight_copy_prompt " 󰆏 COPY "
+set -g @prefix_highlight_sync_prompt " 󰓦 SYNC "
+
+# ADDITIONAL SETTINGS
+
+# History settings
+set -g history-limit 10000
+
+# Activity monitoring
+setw -g monitor-activity on
+set -g visual-activity off
+
+# Copy mode improvements
+setw -g mode-keys vi
+bind -T copy-mode-vi v send-keys -X begin-selection
+bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel 'pbcopy'
+
+# Window numbering
+set -g base-index 1
+setw -g pane-base-index 1
+set -g renumber-windows on
+
+# Automatic window renaming
+setw -g automatic-rename on
+set -g set-titles on
+set -g set-titles-string "#I:#W"
+
+# INITIALIZE TPM
+
+# Keep this line at the very bottom of tmux.conf
+run '~/.tmux/plugins/tpm/tpm'
